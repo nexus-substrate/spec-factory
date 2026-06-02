@@ -1,6 +1,6 @@
 # spec-factory
 
-AI software factory pipeline E2E tester for [nexus-agents](https://github.com/williamzujkowski/nexus-agents). Exercises `execute_spec`, `query_trace`, and `registry_import`.
+AI software factory pipeline E2E tester for [nexus-agents](https://github.com/nexus-substrate/nexus-agents). Exercises `execute_spec`, `query_trace`, and `registry_import`.
 
 ## Quick start
 
