@@ -122,6 +122,8 @@ export interface FactoryConfig {
   readonly dryRun?: boolean;
   /** Run ID for trace query (if known). */
   readonly traceRunId?: string;
+  /** Per-call timeout (ms) for remote tool calls. Omit to use the default. */
+  readonly timeoutMs?: number;
   /** Model to import for registry validation. */
   readonly registryImport?: {
     readonly provider: RegistryImportInput['provider'];

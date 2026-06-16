@@ -26,6 +26,51 @@ export interface ToolCaller {
   call(toolName: string, args: Record<string, unknown>): Promise<unknown>;
 }
 
+/** Default per-call timeout for remote tool calls (ms). */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Error thrown when a tool call exceeds its configured timeout. */
+export class ToolCallTimeoutError extends Error {
+  constructor(toolName: string, timeoutMs: number) {
+    super(`Tool call '${toolName}' timed out after ${timeoutMs}ms`);
+    this.name = 'ToolCallTimeoutError';
+  }
+}
+
+/**
+ * Wrap a ToolCaller so every call is bounded by `timeoutMs`.
+ *
+ * Uses an AbortController combined with a timer, guaranteeing the returned
+ * promise settles even if the underlying call hangs forever.
+ */
+export function withTimeout(
+  caller: ToolCaller,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): ToolCaller {
+  return {
+    call(toolName: string, args: Record<string, unknown>): Promise<unknown> {
+      const controller = new AbortController();
+      const callArgs = { ...args, signal: controller.signal };
+      return new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          controller.abort();
+          reject(new ToolCallTimeoutError(toolName, timeoutMs));
+        }, timeoutMs);
+        caller.call(toolName, callArgs).then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (err) => {
+            clearTimeout(timer);
+            reject(err);
+          }
+        );
+      });
+    },
+  };
+}
+
 // ============================================================================
 // Individual steps
 // ============================================================================
@@ -78,12 +123,14 @@ export async function runFactoryPipeline(
   caller: ToolCaller,
   config: FactoryConfig
 ): Promise<FactoryResult> {
+  const boundedCaller = withTimeout(caller, config.timeoutMs);
+
   // Step 1: Execute spec
   let specResult: SpecResponse | null = null;
   let specError: string | null = null;
   try {
     specResult = await executeSpec(
-      caller,
+      boundedCaller,
       config.spec,
       config.dryRun ?? true
     );
@@ -94,14 +141,14 @@ export async function runFactoryPipeline(
   // Step 2: Query traces (if run ID available)
   let traceResult: QueryTraceResponse | null = null;
   if (config.traceRunId !== undefined) {
-    traceResult = await queryTrace(caller, config.traceRunId);
+    traceResult = await queryTrace(boundedCaller, config.traceRunId);
   }
 
   // Step 3: Registry import (if configured)
   let registryResult: RegistryImportResponse | null = null;
   if (config.registryImport !== undefined) {
     registryResult = await importModel(
-      caller,
+      boundedCaller,
       config.registryImport.provider,
       config.registryImport.modelId
     );

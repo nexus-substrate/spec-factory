@@ -19,12 +19,6 @@ pnpm build       # Compile to dist/
 | `query_trace` | Query execution traces by run ID |
 | `registry_import` | Import model to registry (dry run) |
 
-## Live integration mode
-
-```bash
-NEXUS_LIVE=true npx tsx src/run-live.ts
-```
-
 ## License
 
 MIT
