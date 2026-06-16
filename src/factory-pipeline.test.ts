@@ -10,6 +10,8 @@ import {
   importModel,
   runFactoryPipeline,
   buildTestSpec,
+  withTimeout,
+  ToolCallTimeoutError,
 } from './factory-pipeline.js';
 import type { FactoryConfig } from './types.js';
 import {
@@ -247,6 +249,62 @@ describe('importModel', () => {
 // ============================================================================
 // buildTestSpec
 // ============================================================================
+
+describe('withTimeout', () => {
+  it('rejects with ToolCallTimeoutError when the call hangs', async () => {
+    const caller: ToolCaller = {
+      call: vi.fn(() => new Promise<unknown>(() => {})),
+    };
+
+    const bounded = withTimeout(caller, 10);
+
+    await expect(bounded.call('execute_spec', {})).rejects.toBeInstanceOf(
+      ToolCallTimeoutError
+    );
+  });
+
+  it('passes through a fast result', async () => {
+    const caller: ToolCaller = {
+      call: vi.fn(async () => ({ ok: true })),
+    };
+
+    const bounded = withTimeout(caller, 1000);
+
+    await expect(bounded.call('execute_spec', {})).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it('propagates an underlying thrown error unchanged', async () => {
+    const underlying = new Error('boom');
+    const caller: ToolCaller = {
+      call: vi.fn(async () => {
+        throw underlying;
+      }),
+    };
+
+    const bounded = withTimeout(caller, 1000);
+
+    await expect(bounded.call('execute_spec', {})).rejects.toBe(underlying);
+  });
+
+  it('aborts the signal on timeout', async () => {
+    let captured: AbortSignal | undefined;
+    const caller: ToolCaller = {
+      call: vi.fn((_tool: string, args: Record<string, unknown>) => {
+        captured = args['signal'] as AbortSignal;
+        return new Promise<unknown>(() => {});
+      }),
+    };
+
+    const bounded = withTimeout(caller, 10);
+
+    await expect(bounded.call('execute_spec', {})).rejects.toBeInstanceOf(
+      ToolCallTimeoutError
+    );
+    expect(captured?.aborted).toBe(true);
+  });
+});
 
 describe('buildTestSpec', () => {
   it('builds valid markdown spec', () => {
